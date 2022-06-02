@@ -19,7 +19,7 @@ epsilon = 1e-8
 def do_nothing(x): return x
 
 class R3M(nn.Module):
-    def __init__(self, device, lr, hidden_dim, size=34, l2weight=1.0, l1weight=1.0, 
+    def __init__(self, device, lr, hidden_dim, size=34, l2weight=1.0, l1weight=1.0,
                  langweight=1.0, tcnweight=0.0, l2dist=True, bs=16):
         super().__init__()
 
@@ -62,18 +62,19 @@ class R3M(nn.Module):
         self.convnet.fc = Identity()
         self.convnet.train()
         params += list(self.convnet.parameters())
-        
+
         ## Language Reward
         if self.langweight > 0.0:
             ## Pretrained DistilBERT Sentence Encoder
             from r3m.models.models_language import LangEncoder, LanguageReward
-            self.lang_enc = LangEncoder(self.device, 0, 0) 
-            self.lang_rew = LanguageReward(None, self.outdim, hidden_dim, self.lang_enc.lang_size, simfunc=self.sim) 
+            self.lang_enc = LangEncoder(self.device, 0, 0)
+            self.lang_rew = LanguageReward(None, self.outdim, hidden_dim, self.lang_enc.lang_size, simfunc=self.sim)
             params += list(self.lang_rew.parameters())
         ########################################################################
 
         ## Optimizer
         self.encoder_opt = torch.optim.Adam(params, lr = lr)
+        self.train_layers = None
 
     def get_reward(self, e0, es, sentences):
         ## Only callable is langweight was set to be 1
@@ -105,3 +106,31 @@ class R3M(nn.Module):
         else:
             d = self.cs(tensor1, tensor2)
         return d
+
+    def get_last_n_layers(self, n=1):
+        paras = []
+        train_layers = [name for name, child in self.convnet.named_children() if isinstance(child, torch.nn.Sequential)]
+        self.train_layers = train_layers[-1*n:]
+
+    def last_n_layerparams(self, n=1):
+        paras = []
+        if self.train_layers is None:
+            self.get_last_n_layers(n)
+        print('Layers of model to be finetuned:', self.train_layers)
+
+        for name, module in self.convnet.named_children():
+            if isinstance(module, torch.nn.Sequential) and (name in self.train_layers):
+               paras.extend(list(module.parameters()))
+        return paras
+
+    def train_last_n_layers(self, n=1):
+        paras = []
+        if self.train_layers is None:
+            self.get_last_n_layers(n)
+
+        for name, module in self.convnet.named_children():
+            if isinstance(module, torch.nn.Sequential) and (name in self.train_layers):
+                module.train()
+            else:
+                module.eval()
+        return paras

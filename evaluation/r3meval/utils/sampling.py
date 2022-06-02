@@ -13,8 +13,8 @@ logging.disable(logging.CRITICAL)
 import gc
 from collections import namedtuple
 
-from metaworld.envs import (ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE,
-                            ALL_V2_ENVIRONMENTS_GOAL_HIDDEN)
+#from metaworld.envs import (ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE,
+#                            ALL_V2_ENVIRONMENTS_GOAL_HIDDEN)
 
 
 # Single core rollout to sample trajectories
@@ -133,14 +133,14 @@ def do_rollout(
             rewards=np.array(rewards),
             agent_infos=tensor_utils.stack_tensor_dict_list(agent_infos),
             env_infos=tensor_utils.stack_tensor_dict_list(env_infos),
-            terminated=done, 
+            terminated=done,
             init_state = init_state,
             images=ims
         )
 
         paths.append(path)
         ep += 1
-            
+
     del(env)
     gc.collect()
     return paths
@@ -190,7 +190,7 @@ def sample_paths(
     # result is a paths type and results is list of paths
     for result in results:
         for path in result:
-            paths.append(path)  
+            paths.append(path)
 
     if suppress_print is False:
         print("======= Samples Gathered  ======= | >>>> Time taken = %f " %(timer.time()-start_time) )
@@ -198,7 +198,7 @@ def sample_paths(
     return paths
 
 def _try_multiprocess(func, input_dict_list, num_cpu, max_process_time, max_timeouts):
-    
+
     # Base case
     if max_timeouts == 0:
         return None
@@ -217,5 +217,5 @@ def _try_multiprocess(func, input_dict_list, num_cpu, max_process_time, max_time
 
     pool.close()
     pool.terminate()
-    pool.join()  
+    pool.join()
     return results

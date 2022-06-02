@@ -23,6 +23,14 @@ def init(module, weight_init, bias_init, gain=1):
     bias_init(module.bias.data)
     return module
 
+def _get_embedding_shape(model, transform, device='cuda'):
+    temp = transform(Image.new('RGB', (224, 224))).reshape(-1, 3, 224, 224)
+    temp = temp.to(device=device)
+    model = model.to(device=device)
+    with torch.no_grad():
+        temp = model(temp).reshape(-1)
+    return temp.shape[0]
+
 def _get_embedding(embedding_name='resnet34', load_path="", *args, **kwargs):
     if load_path == "random":
         prt = False
@@ -100,6 +108,17 @@ class StateEmbedding(gym.ObservationWrapper):
             self.transforms = T.Compose([T.Resize(256),
                         T.CenterCrop(224),
                         T.ToTensor()]) # ToTensor() divides by 255
+        elif load_path.startswith("r3m_"):
+            from r3m import load_r3m_layers
+            rep = load_r3m_layers(load_path)
+            rep.eval()
+            self.transforms = T.Compose([T.Resize(256),
+                        T.CenterCrop(224),
+                        T.ToTensor()]) # ToTensor() divides by 255
+            rep.module.outdim = _get_embedding_shape(rep, self.transforms, device=device) # makes a pass through the model using dummy images
+            embedding_dim = rep.module.outdim
+            embedding = rep
+
         else:
             raise NameError("Invalid Model")
         embedding.eval()
@@ -140,6 +159,9 @@ class StateEmbedding(gym.ObservationWrapper):
         else:
             return observation
 
+    def set_finetuning(self, start_finetune):
+        self.start_finetune = start_finetune
+
     def encode_batch(self, obs, finetune=False):
         ### INPUT SHOULD BE [0,255]
         inp = []
@@ -154,6 +176,7 @@ class StateEmbedding(gym.ObservationWrapper):
         if finetune and self.start_finetune:
             emb = self.embedding(inp).view(-1, self.embedding_dim)
         else:
+            #print("Not finetuning: finetune: {} self.start_finetune: {}".format(finetune, self.start_finetune))
             with torch.no_grad():
                 emb =  self.embedding(inp).view(-1, self.embedding_dim).to('cpu').numpy().squeeze()
         return emb
@@ -192,4 +215,4 @@ class MuJoCoPixelObs(gym.ObservationWrapper):
         # This function creates observations based on the current state of the environment.
         # Argument `observation` is ignored, but `gym.ObservationWrapper` requires it.
         return self.get_image()
-        
+

@@ -1,0 +1,43 @@
+#!/bin/sh
+#$ -cwd
+#PBS -N testpy
+#PBS -q workq
+#PBS -V
+
+export MUJOCO_GL="osmesa"
+export MJLIB_PATH=$HOME/.mujoco/mujoco200/bin/libmujoco200.so
+export MJKEY_PATH=$HOME/.mujoco/mjkey.txt
+export MUJOCO_PY_MJPRO_PATH=$HOME/.mujoco/mujoco200/
+export MUJOCO_PY_MJKEY_PATH=$HOME/.mujoco/mujoco200/mjkey.txt
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/bt1/18CS10050/.mujoco/mujoco200/bin
+export PATH="$PATH:$HOME/rpm/usr/bin"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/rpm/usr/lib:$HOME/rpm/usr/lib64"
+export LDFLAGS="-L$HOME/rpm/usr/lib -L$HOME/rpm/usr/lib64"
+export CPATH="$CPATH:$HOME/rpm/usr/include"
+export PATH="/home/bt1/18CS10050/anaconda3/bin:$PATH"
+export PATH="/home/bt1/18CS10050/anaconda3/envs/r3m_base/bin:$PATH"
+
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3
+
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3
+
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_knob1_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3
+
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="left_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3
+
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="right_cap2" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3
+
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m
+#CUDA_VISIBLE_DEVICES=0 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=2
+#CUDA_VISIBLE_DEVICES=1 python evaluation/r3meval/core/hydra_launcher.py hydra/launcher=local hydra/output=local env="kitchen_light_on-v3" camera="default" pixel_based=true embedding=resnet50 num_demos=25 env_kwargs.load_path=r3m bc_kwargs.finetune=false proprio=9 job_name=try_r3m seed=3

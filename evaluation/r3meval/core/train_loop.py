@@ -10,16 +10,32 @@ from r3meval.utils.gaussian_mlp import MLP
 from r3meval.utils.behavior_cloning import BC
 from tabulate import tabulate
 from tqdm import tqdm
-import mj_envs, gym 
+import mj_envs, gym
 import numpy as np, time as timer, multiprocessing, pickle, os
 import os
+import torch
 from collections import namedtuple
 
 
-import metaworld
-from metaworld.envs import (ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE,
-                            ALL_V2_ENVIRONMENTS_GOAL_HIDDEN)
+#import metaworld
+#from metaworld.envs import (ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE,
+#                            ALL_V2_ENVIRONMENTS_GOAL_HIDDEN)
 
+def set_bn_train(module):
+    if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+        module.train()
+    else:
+        module.eval()
+
+def set_model_train(model, last_n_layers=-1):
+    if last_n_layers == -1: # Finetune all the layers
+        model.train()
+    elif last_n_layers == -2: # Finetune only BatchNorm layers
+        model.apply(set_bn_train)
+    elif last_n_layers > 0: # Finetune last n layers, define inside the model
+        model.module.train_last_n_layers(last_n_layers)
+    else:
+        raise Exception
 
 def env_constructor(env_name, device='cuda', image_width=256, image_height=256,
                     camera_name=None, embedding_name='resnet50', pixel_based=True,
@@ -37,16 +53,23 @@ def env_constructor(env_name, device='cuda', image_width=256, image_height=256,
         else:
             e = gym.make(env_name)
         ## Wrap in pixel observation wrapper
-        e = MuJoCoPixelObs(e, width=image_width, height=image_height, 
+        e = MuJoCoPixelObs(e, width=image_width, height=image_height,
                            camera_name=camera_name, device_id=render_gpu_id)
         ## Wrapper which encodes state in pretrained model
-        e = StateEmbedding(e, embedding_name=embedding_name, device=device, load_path=load_path, 
+        e = StateEmbedding(e, embedding_name=embedding_name, device=device, load_path=load_path,
                         proprio=proprio, camera_name=camera_name, env_name=env_name)
         e = GymEnv(e)
     else:
         print("Only supports pixel based")
         assert(False)
     return e
+
+def get_bn_params(model):
+    bn_paras = []
+    for layer in model.modules():
+       if isinstance(layer, torch.nn.modules.batchnorm.BatchNorm2d):
+           bn_paras.extend(list(layer.parameters()))
+    return bn_paras
 
 
 def make_bc_agent(env_kwargs:dict, bc_kwargs:dict, demo_paths:list, epochs:int, seed:int, pixel_based=True):
@@ -56,10 +79,18 @@ def make_bc_agent(env_kwargs:dict, bc_kwargs:dict, demo_paths:list, epochs:int, 
     ## Creates MLP (Where the FC Network has a batchnorm in front of it)
     policy = MLP(e.spec, hidden_sizes=(256, 256), seed=seed)
     policy.model.proprio_only = False
-        
+
     ## Pass the encoder params to the BC agent (for finetuning)
     if pixel_based:
-        enc_p = e.env.embedding.parameters()
+        if bc_kwargs['last_n_layers'] == -1:
+            enc_p = e.env.embedding.parameters()
+        elif bc_kwargs['last_n_layers'] == -2:
+            enc_p = get_bn_params(e.env.embedding)
+        elif bc_kwargs['last_n_layers'] > 0: # Finetune last n layers, define inside the model
+            #enc_p = get_last_n_params(e.env.embedding.module.convnet)
+            enc_p = e.env.embedding.module.last_n_layerparams(bc_kwargs['last_n_layers'])
+        else:
+            raise Exception
     else:
         print("Only supports pixel based")
         assert(False)
@@ -86,6 +117,12 @@ def configure_cluster_GPUs(gpu_logical_id: int) -> int:
         print("No GPUs detected. Defaulting to 0 as the device ID")
     return gpu_id
 
+def check_layer(g, h, layer_no, layer_type):
+    temp = ~torch.eq(g, h)
+    if temp.any():
+        print("Change in layerno {}, in layer type: {}".format(layer_no, layer_type))
+    else:
+        print("No Change in tensor")
 
 def bc_train_loop(job_data:dict) -> None:
 
@@ -96,7 +133,8 @@ def bc_train_loop(job_data:dict) -> None:
 
     # Infers the location of the demos
     ## V2 is metaworld, V0 adroit, V3 kitchen
-    data_dir = '/iris/u/surajn/data/r3m/'
+    #data_dir = '/iris/u/surajn/data/r3m/'
+    data_dir = '/home/bt1/18CS10050/r3m/r3m-data/'
     if "v2" in job_data['env_kwargs']['env_name']:
         demo_paths_loc = data_dir + 'final_paths_multiview_meta_200/' + job_data['camera'] + '/' + job_data['env_kwargs']['env_name'] + '.pickle'
     elif "v0" in job_data['env_kwargs']['env_name']:
@@ -120,13 +158,16 @@ def bc_train_loop(job_data:dict) -> None:
 
     ## Creates agent and environment
     env_kwargs = job_data['env_kwargs']
-    e, agent = make_bc_agent(env_kwargs=env_kwargs, bc_kwargs=job_data['bc_kwargs'], 
+    e, agent = make_bc_agent(env_kwargs=env_kwargs, bc_kwargs=job_data['bc_kwargs'],
                              demo_paths=demo_paths, epochs=1, seed=job_data['seed'], pixel_based=job_data["pixel_based"])
     agent.logger.init_wb(job_data)
 
     highest_score = -np.inf
     max_success = 0
     epoch = 0
+    print(e.env.embedding.module.convnet)
+    ten_0_c, ten_0_b, ten_1_c, ten_1_b, ten_2_c, ten_2_b, ten_3_c, ten_3_b = None, None, None, None, None, None, None, None
+    ten_0_a, ten_1_a, ten_2_a, ten_3_a = None, None, None, None
     while True:
         # update policy using one BC epoch
         last_step = agent.steps
@@ -136,20 +177,49 @@ def bc_train_loop(job_data:dict) -> None:
         ## set embedding to train mode and turn on finetuning
         if (job_data['bc_kwargs']['finetune']) and (job_data['pixel_based']) and (job_data['env_kwargs']['load_path'] != "clip"):
             if last_step > (job_data['steps'] / 4.0):
-                e.env.embedding.train()
-                e.env.embedding.start_finetune = True
+                if False: # Clean this part. only for debugging finetune
+                    if ten_0_b is None:
+                        ten_0_b = e.env.embedding.module.convnet.layer1[0].bn3.weight.clone()
+                        ten_0_c = e.env.embedding.module.convnet.layer1[0].conv3.weight.clone()
+                        ten_0_a = e.env.embedding.module.convnet.layer1[0].bn3.running_mean.clone()
+                        ten_1_b = e.env.embedding.module.convnet.layer2[0].bn3.weight.clone()
+                        ten_1_c = e.env.embedding.module.convnet.layer2[0].conv3.weight.clone()
+                        ten_1_a = e.env.embedding.module.convnet.layer2[0].bn3.running_mean.clone()
+                        ten_2_b = e.env.embedding.module.convnet.layer3[0].bn3.weight.clone()
+                        ten_2_c = e.env.embedding.module.convnet.layer3[0].conv3.weight.clone()
+                        ten_2_a = e.env.embedding.module.convnet.layer3[0].bn3.running_mean.clone()
+                        ten_3_b = e.env.embedding.module.convnet.layer4[0].bn3.weight.clone()
+                        ten_3_c = e.env.embedding.module.convnet.layer4[0].conv3.weight.clone()
+                        ten_3_a = e.env.embedding.module.convnet.layer4[0].bn3.running_mean.clone()
+                    else:
+                        check_layer(ten_0_b, e.env.embedding.module.convnet.layer1[0].bn3.weight, 1, 'BN')
+                        check_layer(ten_0_c, e.env.embedding.module.convnet.layer1[0].conv3.weight, 1, 'conv')
+                        check_layer(ten_0_a, e.env.embedding.module.convnet.layer1[0].bn3.running_mean, 1, 'running_mean')
+                        check_layer(ten_1_b, e.env.embedding.module.convnet.layer2[0].bn3.weight, 2, 'BN')
+                        check_layer(ten_1_c, e.env.embedding.module.convnet.layer2[0].conv3.weight, 2, 'conv')
+                        check_layer(ten_1_a, e.env.embedding.module.convnet.layer2[0].bn3.running_mean, 2, 'running_mean')
+                        check_layer(ten_2_b, e.env.embedding.module.convnet.layer3[0].bn3.weight, 3, 'BN')
+                        check_layer(ten_2_c, e.env.embedding.module.convnet.layer3[0].conv3.weight, 3, 'conv')
+                        check_layer(ten_2_a, e.env.embedding.module.convnet.layer3[0].bn3.running_mean, 3, 'running_mean')
+                        check_layer(ten_3_b, e.env.embedding.module.convnet.layer4[0].bn3.weight, 4, 'BN')
+                        check_layer(ten_3_c, e.env.embedding.module.convnet.layer4[0].conv3.weight, 4, 'conv')
+                        check_layer(ten_3_a, e.env.embedding.module.convnet.layer4[0].bn3.running_mean, 4, 'running_mean')
+                    #print(temp)
+                set_model_train(e.env.embedding, last_n_layers=job_data['bc_kwargs']['last_n_layers'])
+                #e.env.embedding.train()
+                e.env.set_finetuning(True)
         agent.train(job_data['pixel_based'], suppress_fit_tqdm=True, step = last_step)
-        
+
         # perform evaluation rollouts every few epochs
         if ((agent.steps % job_data['eval_frequency']) < (last_step % job_data['eval_frequency'])):
             agent.policy.model.eval()
             if job_data['pixel_based']:
                 e.env.embedding.eval()
-            paths = sample_paths(num_traj=job_data['eval_num_traj'], env=e, #env_constructor, 
-                                 policy=agent.policy, eval_mode=True, horizon=e.horizon, 
-                                 base_seed=job_data['seed']+epoch, num_cpu=job_data['num_cpu'], 
+            paths = sample_paths(num_traj=job_data['eval_num_traj'], env=e, #env_constructor,
+                                 policy=agent.policy, eval_mode=True, horizon=e.horizon,
+                                 base_seed=job_data['seed']+epoch, num_cpu=job_data['num_cpu'],
                                  env_kwargs=env_kwargs)
-            
+
             try:
                 ## Success computation and logging for Adroit and Kitchen
                 success_percentage = e.env.unwrapped.evaluate_success(paths)
@@ -174,7 +244,7 @@ def bc_train_loop(job_data:dict) -> None:
                 success_percentage = np.mean(sc) * 100
             agent.logger.log_kv('eval_epoch', epoch)
             agent.logger.log_kv('eval_success', success_percentage)
-            
+
             # Tracking best success over training
             max_success = max(max_success, success_percentage)
 

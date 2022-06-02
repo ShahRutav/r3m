@@ -9,6 +9,8 @@ import os
 import csv
 import wandb
 
+os.environ["WANDB_MODE"] = "offline"
+
 class DataLog:
 
     def __init__(self):
@@ -17,7 +19,7 @@ class DataLog:
 
     def init_wb(self, cfg):
         print(cfg.keys())
-        wandb.init(project='r3mbc', entity='surajn', name=cfg.job_name)
+        wandb.init(project='r3mbc', entity='local', name=cfg.job_name)
         fullcfg = {**cfg, **cfg.env_kwargs, **cfg.bc_kwargs}
         wandb.config.update(fullcfg)
 

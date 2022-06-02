@@ -3,3 +3,4 @@ __pycache__/
 .nfs*
 *.ipynb*
 *.egg*
+r3m-data/*

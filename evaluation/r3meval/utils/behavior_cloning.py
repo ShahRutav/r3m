@@ -22,6 +22,7 @@ class BC:
                  epochs = 5,
                  batch_size = 64,
                  lr = 1e-3,
+                 lr_enc = 1e-4,
                  optimizer = None,
                  loss_type = 'MSE',  # can be 'MLE' or 'MSE'
                  save_logs = True,
@@ -49,7 +50,13 @@ class BC:
             self.set_variance_with_data(out_scale)
 
         # construct optimizer
-        self.optimizer = torch.optim.Adam(list(self.policy.trainable_params) + list(encoder_params), lr=lr) if optimizer is None else optimizer
+        self.optimizer = torch.optim.Adam(
+                                            [
+                                                {"params": encoder_params, "lr": lr_enc},
+                                                {"params": self.policy.trainable_params},
+                                            ]
+                                            , lr=lr
+                                         ) if optimizer is None else optimizer
 
         # Loss criterion if required
         if loss_type == 'MSE':

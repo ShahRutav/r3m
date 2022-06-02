@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from r3m.models.models_r3m import R3M
 
-import os 
+import os
 from os.path import expanduser
 import omegaconf
 import hydra
@@ -26,7 +26,7 @@ def cleanup_config(cfg):
             del config.agent[key]
     config.agent["_target_"] = "r3m.R3M"
     config["device"] = device
-    
+
     ## Hardcodes to remove the language head
     ## Assumes downstream use is as visual representation
     config.agent["langweight"] = 0
@@ -65,7 +65,7 @@ def load_r3m(modelid):
     if not os.path.exists(modelpath):
         gdown.download(modelurl, modelpath, quiet=False)
         gdown.download(configurl, configpath, quiet=False)
-        
+
     modelcfg = omegaconf.OmegaConf.load(configpath)
     cleancfg = cleanup_config(modelcfg)
     rep = hydra.utils.instantiate(cleancfg)
@@ -111,4 +111,52 @@ def load_r3m_reproduce(modelid):
 
     rep.load_state_dict(r3m_state_dict)
     return rep
-    
+
+def load_r3m_layers(modelid):
+    home = os.path.join(expanduser("~"), ".r3m")
+    if modelid == "r3m_1" or modelid == "r3m_2" or modelid == "r3m_3" or modelid=="r3m_4":
+        foldername = "original_r3m"
+        modelurl = 'https://drive.google.com/uc?id=1jLb1yldIMfAcGVwYojSQmMpmRM7vqjp9'
+        configurl = 'https://drive.google.com/uc?id=1cu-Pb33qcfAieRIUptNlG1AQIMZlAI-q'
+    else:
+        raise NameError('Invalid Model ID')
+
+    if not os.path.exists(os.path.join(home, foldername)):
+        os.makedirs(os.path.join(home, foldername))
+    modelpath = os.path.join(home, foldername, "model.pt")
+    configpath = os.path.join(home, foldername, "config.yaml")
+    if not os.path.exists(modelpath):
+        gdown.download(modelurl, modelpath, quiet=False)
+        gdown.download(configurl, configpath, quiet=False)
+
+    modelcfg = omegaconf.OmegaConf.load(configpath)
+    cleancfg = cleanup_config(modelcfg)
+    rep = hydra.utils.instantiate(cleancfg)
+    rep = torch.nn.DataParallel(rep)
+    r3m_state_dict = remove_language_head(torch.load(modelpath, map_location=torch.device(device))['r3m'])
+
+    rep.load_state_dict(r3m_state_dict)
+    rep = remove_extra_layers(rep, feat_layers=list(modelid.split('_')[1:]))
+    return rep
+
+def remove_extra_layers(model, feat_layers):
+    '''
+    model: Original PyTorch model
+    feat_layers: list of sequence layer numbers from which features are extracted.
+
+    Returns:    New model with modules only from first to last(from feat_layers list) sequence layers
+                + additional layers before and after the sequence layers
+    '''
+    feat_layers = [int(layer_num) for layer_num in feat_layers]
+    seq_ind = 0
+    new_convnet = []
+    last_seq_layer = feat_layers[-1]
+    for ind,md in enumerate(list(model.module.convnet.children())):
+        if isinstance(md, torch.nn.Sequential):
+            seq_ind+=1
+            if seq_ind <= last_seq_layer:
+                new_convnet.append(md)
+        else:
+            new_convnet.append(md)
+    model.module.convnet = torch.nn.Sequential(*new_convnet)
+    return model
