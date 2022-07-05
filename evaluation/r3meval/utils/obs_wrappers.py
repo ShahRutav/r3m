@@ -80,12 +80,13 @@ class StateEmbedding(gym.ObservationWrapper):
         device (str, 'cuda'): where to allocate the model.
 
     """
-    def __init__(self, env, embedding_name=None, device='cuda', load_path="", proprio=0, camera_name=None, env_name=None):
+    def __init__(self, env, embedding_name=None, device='cuda', load_path="", proprio=0, camera_name=None, env_name=None, env_embed=None):
         gym.ObservationWrapper.__init__(self, env)
 
         self.proprio = proprio
         self.load_path = load_path
         self.start_finetune = False
+        self.env_embed = env_embed
         if load_path == "clip":
             import clip
             model, cliptransforms = clip.load("RN50", device="cuda")
@@ -150,9 +151,11 @@ class StateEmbedding(gym.ObservationWrapper):
             ## IF proprioception add it to end of embedding
             if self.proprio:
                 try:
-                    proprio = self.env.unwrapped.get_obs()[:self.proprio]
+                    obs_ = self.env.unwrapped.get_obs()
                 except:
-                    proprio = self.env.unwrapped._get_obs()[:self.proprio]
+                    obs_ = self.env.unwrapped._get_obs()
+                obs_ = np.concatenate([self.env_embed, obs_])
+                proprio = obs_[:self.proprio]
                 emb = np.concatenate([emb, proprio])
 
             return emb
@@ -186,7 +189,12 @@ class StateEmbedding(gym.ObservationWrapper):
             return self.observation(self.env.observation(None))
         else:
             # returns the state based observations
-            return self.env.unwrapped.get_obs()
+            try:
+                obs_ = self.env.unwrapped.get_obs()
+            except:
+                obs_ = self.env.unwrapped._get_obs()
+            obs_ = np.concatenate([self.env_embed, obs_])
+            return obs_
 
 
 class MuJoCoPixelObs(gym.ObservationWrapper):
@@ -205,7 +213,11 @@ class MuJoCoPixelObs(gym.ObservationWrapper):
         if self.camera_name == "default":
             img = self.sim.render(width=self.width, height=self.height, depth=self.depth,
                             device_id=self.device_id)
+            img = self.sim.render(width=self.width, height=self.height, depth=self.depth,
+                            device_id=self.device_id)
         else:
+            img = self.sim.render(width=self.width, height=self.height, depth=self.depth,
+                              camera_name=self.camera_name, device_id=self.device_id)
             img = self.sim.render(width=self.width, height=self.height, depth=self.depth,
                               camera_name=self.camera_name, device_id=self.device_id)
         img = img[::-1,:,:]

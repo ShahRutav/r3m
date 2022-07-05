@@ -13,6 +13,7 @@ import time as timer
 import torch
 from torch.autograd import Variable
 from r3meval.utils.logger import DataLog
+from r3meval.utils.pcgrad import PCGrad
 from tqdm import tqdm
 
 
@@ -30,6 +31,8 @@ class BC:
                  finetune = False,
                  proprio = 0,
                  encoder_params = [],
+                 pcgrad=False,
+                 num_losses=1,
                  **kwargs,
                  ):
 
@@ -43,6 +46,8 @@ class BC:
         self.finetune = finetune
         self.proprio = proprio
         self.steps = 0
+        self.pcgrad = pcgrad
+        self.num_losses = num_losses
 
         if set_transforms:
             in_shift, in_scale, out_shift, out_scale = self.compute_transformations()
@@ -57,6 +62,8 @@ class BC:
                                             ]
                                             , lr=lr
                                          ) if optimizer is None else optimizer
+        if self.pcgrad:
+            self.optimizer = PCGrad(self.optimizer, reduction="sum")
 
         # Loss criterion if required
         if loss_type == 'MSE':
@@ -147,14 +154,32 @@ class BC:
             self.logger.log_kv('loss_before', loss_val)
 
         # train loop
-        for ep in config_tqdm(range(self.epochs), suppress_fit_tqdm):
-            for mb in range(int(num_samples / self.mb_size)):
-                rand_idx = np.random.choice(num_samples, size=self.mb_size)
-                self.optimizer.zero_grad()
-                loss = self.loss(data, idx=rand_idx)
-                loss.backward()
-                self.optimizer.step()
-                self.steps += 1
+        if self.pcgrad:
+            for ep in config_tqdm(range(self.epochs), suppress_fit_tqdm):
+                for mb in range(int(num_samples / (self.num_losses * self.mb_size))):
+                    self.optimizer.zero_grad()
+                    losses = []
+                    for i in range(self.num_losses):
+                        rand_idx = np.random.choice(num_samples//self.num_losses, size=self.mb_size)
+                        rand_idx += i*(num_samples//self.num_losses)
+                        loss = self.loss(data, idx=rand_idx)
+                        losses.append(loss)
+                        #loss.backward()
+                    print(losses, sum(losses))
+                    self.optimizer.pc_backward(losses)
+                    self.optimizer.step()
+                    self.steps += 1
+        else:
+            for ep in config_tqdm(range(self.epochs), suppress_fit_tqdm):
+                for mb in range(int(num_samples / self.mb_size)):
+                    rand_idx = np.random.choice(num_samples, size=self.mb_size)
+                    self.optimizer.zero_grad()
+                    loss = self.loss(data, idx=rand_idx)
+                    print(loss)
+                    loss.backward()
+                    self.optimizer.step()
+                    self.steps += 1
+
         params_after_opt = self.policy.get_param_values()
         self.policy.set_param_values(params_after_opt, set_new=True, set_old=True)
         # log stats after

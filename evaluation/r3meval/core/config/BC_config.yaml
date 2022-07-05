@@ -7,7 +7,7 @@ default:
     - override hydra/output: local
 
 # general inputs
-env               :   pen-v0
+env               :   ["pen-v0"]
 pixel_based       :   True                    # pixel based (True) or state based (False) experiment
 embedding         :   resnet50                # choice of embedding network
 camera            :   vil_camera              # choice of camera to use for image generation
@@ -50,13 +50,14 @@ bc_kwargs:
   lr_enc          :   1e-3
   save_logs       :   False
   finetune        :   False
-  last_n_layers   :   -2
+  last_n_layers   :   -1
   proprio         :   ${proprio}
   proprio_only    :   False
+  pcgrad          :   False
 
 # general outputs
 job_name          :   'R3M'
 
 hydra:
     job:
-        name: ft_bn_only
+        name: debug
