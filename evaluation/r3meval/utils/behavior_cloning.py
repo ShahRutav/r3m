@@ -63,7 +63,7 @@ class BC:
                                             , lr=lr
                                          ) if optimizer is None else optimizer
         if self.pcgrad:
-            self.optimizer = PCGrad(self.optimizer, reduction="sum")
+            self.optimizer = PCGrad(self.optimizer, reduction="mean")
 
         # Loss criterion if required
         if loss_type == 'MSE':
@@ -118,7 +118,9 @@ class BC:
         # minimize negative log likelihood
         return -torch.mean(LL)
 
-    def mse_loss(self, data, idx=None):
+    def mse_loss(self, data, idxes=None):
+        assert type(idxes) == list
+        idx = np.concatenate(idxes, axis=0).reshape(-1)
         idx = range(data['observations'].shape[0]) if idx is None else idx
         if type(data['observations']) is torch.Tensor:
             idx = torch.LongTensor(idx)
@@ -138,7 +140,14 @@ class BC:
         if type(act_expert) is not torch.Tensor:
             act_expert = Variable(torch.from_numpy(act_expert).float(), requires_grad=False)
         act_pi = self.policy.model(obs)
-        return self.loss_criterion(act_pi, act_expert.detach())
+        losses = []
+        bsize=idxes[0].shape[0]
+        for i in range(len(idxes)):
+            act_ = act_pi[i*bsize:(i+1)*bsize].squeeze()
+            act_expert_ = act_expert[i*bsize:(i+1)*bsize].squeeze()
+            losses.append(self.loss_criterion(act_, act_expert_.detach()))
+
+        return losses
 
     def fit(self, data, suppress_fit_tqdm=False, **kwargs):
         # data is a dict
@@ -159,12 +168,12 @@ class BC:
                 for mb in range(int(num_samples / (self.num_losses * self.mb_size))):
                     self.optimizer.zero_grad()
                     losses = []
+                    idxes = []
                     for i in range(self.num_losses):
                         rand_idx = np.random.choice(num_samples//self.num_losses, size=self.mb_size)
                         rand_idx += i*(num_samples//self.num_losses)
-                        loss = self.loss(data, idx=rand_idx)
-                        losses.append(loss)
-                        #loss.backward()
+                        idxes.append(rand_idx)
+                    losses = self.loss(data, idx=idxes)
                     print(losses, sum(losses))
                     self.optimizer.pc_backward(losses)
                     self.optimizer.step()
@@ -174,7 +183,7 @@ class BC:
                 for mb in range(int(num_samples / self.mb_size)):
                     rand_idx = np.random.choice(num_samples, size=self.mb_size)
                     self.optimizer.zero_grad()
-                    loss = self.loss(data, idx=rand_idx)
+                    loss = self.loss(data, idx=[rand_idx])
                     print(loss)
                     loss.backward()
                     self.optimizer.step()

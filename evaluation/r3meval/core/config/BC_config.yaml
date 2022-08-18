@@ -15,7 +15,7 @@ device            :   cuda
 
 # experiment and evaluation
 seed              :   123                     # used as base_seed for rolling out policy for eval in sample_paths
-steps             :   20000                  # number of outer epochs
+steps             :   40000                  # number of outer epochs
 eval_frequency    :   1000                       # frequency of epochs for evaluation and logging
 eval_num_traj     :   50                      # number of rollouts to eval
 num_cpu           :   1                       # for rolling out paths when evaluating
@@ -60,4 +60,4 @@ job_name          :   'R3M'
 
 hydra:
     job:
-        name: debug
+        name: pcgrad_200demos_mean
